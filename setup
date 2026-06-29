@@ -102,7 +102,7 @@ step "Installing extra packages"
 paru -S --needed --noconfirm "${EXTRA_PKGS[@]}"
 
 step "Installing AUR packages"
-paru -S --needed --noconfirm --assume-installed systemd "${AUR_PKGS[@]}"
+paru -S --needed --noconfirm "${AUR_PKGS[@]}"
 
 # 3. GPU drivers
 step "Installing GPU drivers"
