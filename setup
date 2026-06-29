@@ -47,6 +47,8 @@ SYSTEM_PKGS=(
     upower
     wireplumber
     wl-clipboard
+    xdg-desktop-portal
+    xdg-desktop-portal-hyprland
     xdg-utils
     zsh
 )
