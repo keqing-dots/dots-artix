@@ -18,11 +18,15 @@ trap 'sudo rm -f /etc/sudoers.d/99-keqing-setup' EXIT
 
 SYSTEM_PKGS=(
     bluez
+    bluez-openrc
     bluez-utils
     fcitx5
     fontconfig
     git
+    dbus
+    dbus-openrc
     elogind
+    elogind-openrc
     greetd
     greetd-openrc
     grub
@@ -31,6 +35,7 @@ SYSTEM_PKGS=(
     kitty
     libnotify
     networkmanager
+    networkmanager-openrc
     pciutils
     pipewire
     pipewire-alsa
@@ -87,17 +92,6 @@ else
     echo "paru already installed"
 fi
 
-# paru.conf: assume systemd installed so AUR packages that link against
-# libsystemd.so (provided by elogind) don't get blocked by the resolver
-mkdir -p "$HOME/.config/paru"
-if ! grep -q "AssumeInstalled" "$HOME/.config/paru/paru.conf" 2>/dev/null; then
-    if grep -q "^\[options\]" "$HOME/.config/paru/paru.conf" 2>/dev/null; then
-        sed -i '/^\[options\]/a AssumeInstalled = systemd' "$HOME/.config/paru/paru.conf"
-    else
-        echo -e "\n[options]\nAssumeInstalled = systemd" >> "$HOME/.config/paru/paru.conf"
-    fi
-fi
-
 # 2. Dependencies
 step "Installing system packages"
 paru -S --needed --noconfirm "${SYSTEM_PKGS[@]}"
@@ -106,7 +100,7 @@ step "Installing extra packages"
 paru -S --needed --noconfirm "${EXTRA_PKGS[@]}"
 
 step "Installing AUR packages"
-paru -S --needed --noconfirm "${AUR_PKGS[@]}"
+paru -S --needed --noconfirm --assume-installed systemd "${AUR_PKGS[@]}"
 
 # 3. GPU drivers
 step "Installing GPU drivers"
