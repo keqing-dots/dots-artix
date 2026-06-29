@@ -66,6 +66,7 @@ update_font() {
     local otf="/usr/share/fonts/OTF/ComicShannsMonoNerdFont-Regular.otf"
     local bdf="/tmp/comicshanns.bdf" bdf_fixed="/tmp/comicshanns_fixed.bdf" psf="/tmp/comicshanns.psf"
     local font_dest; font_dest=$(join_r "$1" "/usr/share/kbd/consolefonts/comicshanns.psf")
+    local vconsole; vconsole=$(join_r "$1" "/etc/vconsole.conf")
     local consolefont_conf; consolefont_conf=$(join_r "$1" "/etc/conf.d/consolefont")
 
     echo "converting otf -> bdf"
@@ -78,6 +79,11 @@ update_font() {
         512 "$psf" &>/dev/null
     echo "installing tty font"
     sudoc "$1" cp "$psf" "$font_dest"
+    # mkinitcpio consolefont hook reads FONT from /etc/vconsole.conf at build time
+    sudoc "$1" touch "$vconsole"
+    sudoc "$1" sed -i '/^FONT=/d' "$vconsole"
+    echo "FONT=comicshanns" | sudoc "$1" tee -a "$vconsole" >/dev/null
+    # OpenRC consolefont service reads from /etc/conf.d/consolefont at runtime
     sudoc "$1" mkdir -p "$(dirname "$consolefont_conf")"
     sudoc "$1" touch "$consolefont_conf"
     sudoc "$1" sed -i '/^consolefont=/d' "$consolefont_conf"
