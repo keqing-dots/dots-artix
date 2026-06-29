@@ -36,7 +36,7 @@ command = "agreety --cmd $ZSH_PATH"
 user = "greeter"
 
 [initial_session]
-command = "Hyprland"
+command = "dbus-run-session Hyprland"
 user = "$TARGET_USER"
 EOF
 

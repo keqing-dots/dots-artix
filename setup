@@ -91,7 +91,11 @@ fi
 # libsystemd.so (provided by elogind) don't get blocked by the resolver
 mkdir -p "$HOME/.config/paru"
 if ! grep -q "AssumeInstalled" "$HOME/.config/paru/paru.conf" 2>/dev/null; then
-    echo -e "\n[options]\nAssumeInstalled = systemd" >> "$HOME/.config/paru/paru.conf"
+    if grep -q "^\[options\]" "$HOME/.config/paru/paru.conf" 2>/dev/null; then
+        sed -i '/^\[options\]/a AssumeInstalled = systemd' "$HOME/.config/paru/paru.conf"
+    else
+        echo -e "\n[options]\nAssumeInstalled = systemd" >> "$HOME/.config/paru/paru.conf"
+    fi
 fi
 
 # 2. Dependencies
@@ -133,7 +137,7 @@ sudo grub-mkconfig -o /boot/grub/grub.cfg
 
 # 6. update (skip: plymouth, sddm, grub)
 step "Running update modules"
-for mod in stow sudo font cursor desktop bin vscode yazi splash; do
+for mod in stow sudo font cursor desktop bin vscode yazi; do
     echo "  -> update $mod"
     "$R/scripts/update" "$mod"
 done
