@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+# ==========================================
+# LOGGING FUNCTION
+# ==========================================
+# Print styled log messages
+log() { echo -e "\n\033[1;34m:: \033[1;37m$1\033[0m"; }
+
+# ==========================================
+# INITIAL DISK USAGE
+# ==========================================
+log "Initial Disk Usage (/)"
+df -h /
+
+# ==========================================
+# CLEAN PACMAN DEPENDENCIES
+# ==========================================
+log "Cleaning unneeded dependencies (orphans)..."
+orphans=$(pacman -Qdtq 2>/dev/null)
+[[ -n "$orphans" ]] && sudo pacman -Rns $orphans --noconfirm || echo "No orphans found."
+
+# ==========================================
+# CLEAR PACMAN CACHE
+# ==========================================
+log "Clearing pacman cache..."
+sudo pacman -Scc --noconfirm
+
+# ==========================================
+# CLEAR AUR HELPER CACHES
+# ==========================================
+log "Clearing AUR helper caches..."
+command -v paru &>/dev/null && { echo "Cleaning paru cache..."; paru -Scc --noconfirm; rm -rf "$HOME/.cache/paru/"{clone,diff}/* 2>/dev/null; }
+command -v yay &>/dev/null && { echo "Cleaning yay cache..."; yay -Scc --noconfirm; rm -rf "$HOME/.cache/yay"/* 2>/dev/null; }
+
+# ==========================================
+# ROTATE SYSTEM LOGS
+# ==========================================
+log "Rotating system logs..."
+sudo find /var/log -name "*.log" -mtime +7 -delete 2>/dev/null || true
+command -v logrotate &>/dev/null && sudo logrotate -f /etc/logrotate.conf 2>/dev/null || true
+
+# ==========================================
+# CLEAN APPLICATION CACHES
+# ==========================================
+log "Cleaning application-specific bloat..."
+# Suppress errors in case the user hasn't run the app yet and the dir doesn't exist
+rm -rf "$HOME/.config/discord/"{Cache,Code\ Cache}/* 2>/dev/null
+rm -rf "$HOME/.config/teams-for-linux/Partitions"/* 2>/dev/null
+rm -rf "$HOME/.config/Code/"{CachedData,User/WorkspaceStorage,logs}/* 2>/dev/null
+
+# ==========================================
+# CLEAN DEVELOPMENT CACHES
+# ==========================================
+log "Cleaning development caches..."
+rm -rf "$HOME/.cache/"{pip,sccache} "$HOME/.node-gyp" 2>/dev/null
+command -v go &>/dev/null && go clean -cache -modcache 2>/dev/null
+
+# ==========================================
+# EMPTY TRASH & THUMBNAILS
+# ==========================================
+log "Emptying trash and thumbnails..."
+rm -rf "$HOME/.cache/thumbnails"/* "$HOME/.local/share/Trash"/* 2>/dev/null
+
+# ==========================================
+# REMOVE UNUSED FLATPAK RUNTIMES
+# ==========================================
+command -v flatpak &>/dev/null && { log "Removing unused Flatpak runtimes..."; flatpak uninstall --unused -y; }
+
+# ==========================================
+# FINAL DISK USAGE
+# ==========================================
+log "Cleanup Complete! Final Disk Usage (/)"
+df -h /

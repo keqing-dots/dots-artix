@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+set -euo pipefail
+trap '_die "Script failed unexpectedly"' ERR
+
+# ==========================================
+# VARIABLE DECLARATIONS
+# ==========================================
+
+_SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+_cmd=""
+
+# ==========================================
+# INTERNAL HELPERS (Hidden from Help & Execution)
+# ==========================================
+
+_die() {
+    local message="$1"
+    echo "ERROR: $message" >&2
+    
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send "Keqing Error" "$message" 2>/dev/null || true
+    fi
+    exit 1
+}
+
+_open_link() {
+    local link="${1:-}"
+    [[ -z "$link" ]] && _die "_open_link requires a URL"
+    command -v xdg-open >/dev/null 2>&1 || _die "xdg-open is not installed"
+    nohup xdg-open "$link" >/dev/null 2>&1 &
+}
+
+_notify() {
+    local title="$1"
+    local message="${2:-}"
+    [[ -n "$message" ]] || message="$title"
+    
+    echo "$title: $message"
+    command -v notify-send >/dev/null 2>&1 && notify-send "$title" "$message" 2>/dev/null || true
+}
+
+_help() {
+cat <<'EOF'
+    Keqing Helper Tool
+    Usage: keqing [--]<command> [args]
+
+    Commands:
+        [--]help            Show this help message
+        [--]config          Open this script in VS Code
+        [--]omp             Open the oh-my-posh prompt
+        [--]tropes          Open the Keqing TV Tropes page
+        [--]voicelines      Open the Japanese voice-overs page
+        [--]wiki            Open the Keqing fandom wiki
+        [--]name            Copy '刻晴' to clipboard
+EOF
+}
+
+# ==========================================
+# PUBLIC COMMANDS
+# ==========================================
+
+config() {
+    local target="$0"
+    [[ ! -f "$target" ]] && target="$(command -v "$0" 2>/dev/null || true)"
+    [[ -z "${target:-}" || ! -f "$target" ]] && _die "Could not resolve script path to open"
+    command -v code >/dev/null 2>&1 && code "$target" || _die "code is not installed"
+}
+
+omp() { command -v code >/dev/null 2>&1 && code "$HOME/.config/oh-my-posh/Keqing.json" || _die "code is not installed"; }
+
+tropes() { _open_link "https://tvtropes.org/pmwiki/pmwiki.php/Characters/GenshinImpactQixing"; }
+
+voicelines() { _open_link "https://genshin-impact.fandom.com/wiki/Keqing/Voice-Overs/Japanese"; }
+
+wiki() { _open_link "https://genshin-impact.fandom.com/wiki/Keqing"; }
+
+name() {
+    command -v wl-copy >/dev/null 2>&1 || _die "wl-copy is not installed"
+    printf "刻晴" | wl-copy
+    _notify "Keqing" "Copied '刻晴' to clipboard"
+}
+
+# ==========================================
+# MAIN ENTRY POINT
+# ==========================================
+
+[[ -f "$_SELF_DIR/lib/actions" ]] && source "$_SELF_DIR/lib/actions"
+
+[[ $# -eq 0 ]] && { _help; exit 0; }
+
+case "${1:-}" in
+    --help|help) _help; exit 0 ;;
+    --*) _cmd="${1#--}"; shift ;;
+    *) _cmd="$1"; shift ;;
+esac
+
+[[ -n "$_cmd" ]] || _die "expected: keqing [--]<command> [args]"
+declare -f "$_cmd" >/dev/null 2>&1 || _die "command not found: $_cmd"
+[[ "$_cmd" != _* ]] || _die "command not permitted: $_cmd"
+
+"$_cmd" "$@"

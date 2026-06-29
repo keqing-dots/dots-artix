@@ -1,0 +1,199 @@
+prefer-no-csd
+
+// =====================
+// ENVIRONMENT VARIABLES
+// =====================
+environment {
+    KEQING_DOTS_ROOT "/home/keqingsimp/keqing-dots"
+
+    // Cursor
+    XCURSOR_THEME "Keqing"
+    XCURSOR_SIZE "24"
+
+    // Input method
+    QT_IM_MODULE "fcitx5"
+    XMODIFIERS "@im=fcitx5"
+    INPUT_METHOD "fcitx5"
+    SDL_IM_MODULE "fcitx5"
+
+    // Toolkit
+    XDG_MENU_PREFIX "arch-"
+    QT_QPA_PLATFORMTHEME "qt6ct"
+    GTK_THEME "Adwaita:dark"
+    GTK_APPLICATION_PREFER_DARK_THEME "1"
+    QT_STYLE_OVERRIDE "Fusion"
+    QT_QUICK_CONTROLS_STYLE "Fusion"
+    QT_THEME "dark"
+
+    // Session
+    XDG_CURRENT_DESKTOP "niri"
+    XDG_SESSION_DESKTOP "niri"
+    XDG_SESSION_TYPE "wayland"
+
+    // Wayland
+    QT_QPA_PLATFORM "wayland;xcb"
+    GDK_BACKEND "wayland,x11"
+    MOZ_ENABLE_WAYLAND "1"
+    GTK_USE_PORTAL "1"
+}
+
+// =====
+// INPUT
+// =====
+input {
+    keyboard {
+        repeat-rate 35
+        repeat-delay 200
+    }
+    focus-follows-mouse
+}
+
+// =======
+// OUTPUTS
+// =======
+output "DP-3" {
+    mode "5120x1440"
+    scale 1.0
+    position x=0 y=0
+}
+
+output "DP-2" {
+    mode "3440x1440"
+    scale 1.0
+    position x=840 y=-1440
+}
+
+output "DP-1" {
+    mode "2560x682"
+    scale 1.0
+    transform "270"
+    position x=5120 y=0
+}
+
+// ======
+// LAYOUT
+// ======
+layout {
+    gaps 10
+
+    struts {
+        left 10
+        right 10
+        top 10
+        bottom 10
+    }
+
+    focus-ring {
+        off
+    }
+
+    border {
+        width 5
+        active-gradient from="#7B2FE8EE" to="#C87EFFEE" angle=45
+        inactive-color "#6B5890AA"
+    }
+
+}
+
+// ========
+// GESTURES
+// ========
+gestures {
+    hot-corners {
+        off
+    }
+}
+
+// ============
+// WINDOW RULES
+// ============
+window-rule {
+    draw-border-with-background false
+    geometry-corner-radius 10
+    clip-to-geometry true
+    open-floating false
+}
+
+window-rule {
+    match app-id="codium"
+    opacity 0.7
+}
+
+// ===========
+// KEYBINDINGS
+// ===========
+binds {
+    Mod+Shift+Slash { show-hotkey-overlay; }
+
+    // Apps
+    Mod+T { spawn "kitty"; }
+    Mod+B { spawn "zen-browser"; }
+    Mod+C { spawn "vscodium"; }
+    Mod+E { spawn "kitty" "-e" "yazi"; }
+    Mod+Shift+B { spawn "zen-browser" "--private"; }
+    Mod+Shift+K { spawn "vscodium" "/home/keqingsimp/keqing-dots"; }
+
+    // Keqing-shell
+    Shift+Space { spawn "keqing-shell" "launcher"; }
+    Mod+I { spawn "keqing-shell" "settings"; }
+    Mod+L { spawn "keqing-shell" "lock"; }
+    Mod+Q { spawn "keqing-shell" "logout"; }
+
+    // Window management
+    Mod+W { close-window; }
+    Mod+F { maximize-column; }
+    Mod+Shift+F { fullscreen-window; }
+    Mod+V { toggle-window-floating; }
+    Mod+Shift+S { screenshot; }
+    Mod+Tab { toggle-overview;}
+
+    // Focus (left/right = columns, up/down = windows within a column)
+    Mod+Left { focus-column-left; }
+    Mod+Right { focus-column-right; }
+    Mod+Up { focus-window-up; }
+    Mod+Down { focus-window-down; }
+
+    // Move
+    Mod+Shift+Left { move-column-left; }
+    Mod+Shift+Right { move-column-right; }
+    Mod+Shift+Up { move-window-up; }
+    Mod+Shift+Down { move-window-down; }
+
+    // Resize
+    Mod+Alt+Left { set-column-width "-10%"; }
+    Mod+Alt+Right { set-column-width "+10%"; }
+    Mod+Alt+Up { set-window-height "-10%"; }
+    Mod+Alt+Down { set-window-height "+10%"; }
+
+    // Workspaces — focus
+    Mod+1 { focus-workspace 1; }
+    Mod+2 { focus-workspace 2; }
+    Mod+3 { focus-workspace 3; }
+    Mod+4 { focus-workspace 4; }
+    Mod+5 { focus-workspace 5; }
+    Mod+6 { focus-workspace 6; }
+    Mod+7 { focus-workspace 7; }
+    Mod+8 { focus-workspace 8; }
+    Mod+9 { focus-workspace 9; }
+    Mod+0 { focus-workspace 10; }
+
+    // Workspaces — move column (stay on current workspace)
+    Mod+Shift+1 { move-column-to-workspace 1; }
+    Mod+Shift+2 { move-column-to-workspace 2; }
+    Mod+Shift+3 { move-column-to-workspace 3; }
+    Mod+Shift+4 { move-column-to-workspace 4; }
+    Mod+Shift+5 { move-column-to-workspace 5; }
+    Mod+Shift+6 { move-column-to-workspace 6; }
+    Mod+Shift+7 { move-column-to-workspace 7; }
+    Mod+Shift+8 { move-column-to-workspace 8; }
+    Mod+Shift+9 { move-column-to-workspace 9; }
+    Mod+Shift+0 { move-column-to-workspace 10; }
+
+    // Media and brightness
+    XF86AudioRaiseVolume allow-when-locked=true { spawn "wpctl" "set-volume" "-l" "1" "@DEFAULT_AUDIO_SINK@" "1%+"; }
+    XF86AudioLowerVolume allow-when-locked=true { spawn "wpctl" "set-volume" "@DEFAULT_AUDIO_SINK@" "1%-"; }
+    XF86AudioMicMute allow-when-locked=true { spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SOURCE@" "toggle"; }
+    XF86AudioMute allow-when-locked=true { spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SINK@" "toggle"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "-e4" "-n2" "set" "1%-"; }
+    XF86MonBrightnessUp allow-when-locked=true { spawn "brightnessctl" "-e4" "-n2" "set" "1%+"; }
+}

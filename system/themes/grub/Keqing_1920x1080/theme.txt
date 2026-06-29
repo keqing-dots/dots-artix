@@ -1,0 +1,30 @@
+desktop-image: "background.png"
+title-text: ""
+title-color: "#ffffff"
+terminal-box: "terminal/terminal_box_*.png"
+terminal-width: "100%"
+terminal-height: "100%"
+
++ boot_menu {
+  left = 30%
+  top = 40%
+  width = 40%
+  height = 30%
+  item_font="ComicShannsMono Nerd Font 20"
+  item_color = "#cccccc"
+  selected_item_color = "#ffffff"
+  icon_width = 45
+  icon_height = 45
+  item_icon_space = 20
+  item_height = 30
+  item_padding = 1
+  item_spacing = 15
+  scrollbar = false
+  menu_pixmap_style = "menu/menu_*.png"
+  selected_item_pixmap_style = "select/select_*.png"
+  align = "center"
+}
+
++ label {
+  text = ""
+}

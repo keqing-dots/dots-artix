@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+current_network="$1"
+dns="$2"
+
+if [ -z "$current_network" ]; then
+    current_network=$(nmcli -t -f NAME,TYPE connection show --active | awk -F: '
+        $2 == "802-3-ethernet" || $2 == "ethernet" { print $1; exit }
+    ')
+
+    if [ -z "$current_network" ]; then
+        current_network=$(nmcli -t -f NAME,TYPE connection show --active | head -n 1 | cut -d: -f1)
+    fi
+    
+    if [ -z "$current_network" ]; then
+        echo "Error: No connection name provided and no active connection detected."
+        echo "Usage: $0 [connection_name] [\"dns_servers\"]"
+        exit 1
+    fi
+    echo "Auto-detected active connection: $current_network"
+fi
+
+if [ -z "$dns" ]; then
+    dns="1.1.1.1 8.8.8.8"
+fi
+
+echo "Setting DNS for '$current_network' to '$dns'..."
+
+nmcli connection modify "$current_network" ipv4.ignore-auto-dns yes
+nmcli connection modify "$current_network" ipv4.dns "$dns"
+nmcli connection up "$current_network"

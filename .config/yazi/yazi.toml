@@ -1,0 +1,28 @@
+[mgr]
+ratio = [2, 6, 2]
+sort_by = "extension"
+show_hidden = true
+
+[tasks]
+image_bound = [10000, 10000]
+
+[opener]
+edit = [{ run = 'code %s', block = true, for = "unix" }]
+astah = [{ run = 'astah-uml %s', desc = "Open in Astah", orphan = true }]
+drawio = [{ run = 'drawio %s', desc = "Open in Draw.io", orphan = true }]
+
+[open]
+prepend_rules = [
+  { url = "*.asta", use = "astah" },
+  { url = "*.drawio", use = "drawio" },
+]
+
+[plugin]
+prepend_spotters = [
+  { mime = "audio/*", run = "spot" },
+  { url = "*/", run = "spot" },
+  { url = "*", run = "spot" },
+  { mime = "image/*", run = "spot-image" },
+]
+append_spotters = [{ url = "*", run = "file-extra-metadata" }]
+append_previewers = [{ url = "*", run = "file-extra-metadata" }]

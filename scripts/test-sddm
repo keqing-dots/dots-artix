@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+ROOT_DIR="${KEQING_DOTS_ROOT:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
+
+fail() {
+    local exit_code=$?
+    local src="${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}"
+    local line="${BASH_LINENO[0]:-?}"
+    echo "fail: ${src}:${line}: ${BASH_COMMAND}" >&2
+    exit "$exit_code"
+}
+die() { echo "$*" >&2; exit 1; }
+
+trap 'fail' ERR
+
+src="$ROOT_DIR/system/themes/sddm/Keqing"
+dst="/usr/share/sddm/themes/Keqing"
+
+find_greeter() {
+    local candidate
+    for candidate in sddm-greeter-qt6 sddm-greeter-qt5 sddm-greeter; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+test_theme(){
+    local theme="$1"
+    [[ ! -d "$theme" ]] && die "$theme not found"
+
+    local greeter
+    greeter="$(find_greeter)" || die "SDDM not found"
+
+    echo "Running: $greeter --test-mode --theme $theme"
+    echo "Note: don't run the 'sddm' daemon manually as a user (it needs VT/xauth permissions and should be started by systemd)."
+    "$greeter" --test-mode --theme "$theme"
+}
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage: $0 {src|dst}" >&2
+    exit 2
+fi
+
+case "$1" in
+    "src") test_theme "$src" ;;
+    "dst") test_theme "$dst" ;;
+esac
+
+echo success

@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+R="${KEQING_DOTS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+TR="${UPDATE_TARGET_ROOT:-/}"
+TN="Keqing"
+SD="$R/scripts"
+TD="$R/system/themes"
+AD="$R/system/applications"
+
+MODS=(bin cursor desktop font grub sudo vscode yazi splash ramfs checkroot stow)
+
+BIN_IGNORE=()
+
+source "$R/source/gpu.sh"
+
+fail() { echo "fail: ${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}:${BASH_LINENO[0]:-?}: ${BASH_COMMAND}" >&2; exit "$?"; }
+die() { echo "$*" >&2; exit 1; }
+trap 'fail' ERR
+
+req_cmd() { command -v "$1" &>/dev/null || die "Missing cmd: $1"; }
+req_dir() { [[ -d "$1" ]] || die "Missing dir: $1"; }
+join_r() { [[ "$1" == "/" ]] && echo "$2" || echo "${1%/}$2"; }
+sudoc() { local r="$1"; shift; [[ "$r" == "/" ]] && sudo "$@" || "$@"; }
+
+update_stow() {
+    [[ "$2" -eq 0 ]] || die "stow: --remove not supported"
+    local T="${STOW_TARGET:-$HOME}" M="${STOW_MODE:-stow}" LOG="/tmp/stow-dry.out"
+    local IGN=(--ignore='^(?!\.config(/|$)|\.zshrc$|\.gtkrc-2\.0$).*')
+    [[ "$M" =~ ^(stow|restow)$ ]] || die "invalid STOW_MODE: $M"
+    req_cmd stow; req_dir "$R"; cd "$R"
+
+    find "$R/.config" -mindepth 1 -type d -exec bash -c 'mkdir -p "$1/${2#$3/}"' _ "$T/.config" {} "$R/.config" \;
+
+    stow -d "$R" -t "$T" --"$M" -n -v . "${IGN[@]}" >"$LOG" 2>&1 || {
+        grep -q "conflict\|existing target" "$LOG" || die "stow dry-run failed:\n$(cat "$LOG")"
+        find "$R" -mindepth 1 -name '.git' -prune -o -type f -print0 | while IFS= read -r -d '' s; do
+            local t="$T/${s#$R/}"
+            if [[ -L "$t" ]]; then
+                [[ $(readlink -f "$t" 2>/dev/null) != $(readlink -f "$s" 2>/dev/null) ]] && rm -f "$t"
+            elif [[ -f "$t" ]]; then
+                rm -f "$t"
+            fi
+        done
+    }
+    stow -d "$R" -t "$T" --"$M" -v . "${IGN[@]}"
+}
+
+update_sudo() {
+    local t; t=$(join_r "$1" "/etc/sudoers.d/10-pwfeedback")
+    sudoc "$1" mkdir -p "${t%/*}"
+    echo "Defaults pwfeedback" | sudoc "$1" tee "$t" >/dev/null
+    sudoc "$1" chmod 440 "$t"
+}
+
+update_font() {
+    echo "installing fonts"
+    req_cmd pacman; sudo pacman -S --noconfirm --quiet otf-comicshanns-nerd &>/dev/null
+    local fc; fc=$(join_r "$1" "/etc/fonts/local.conf")
+    sudoc "$1" mkdir -p "${fc%/*}"
+    echo '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd"><fontconfig><alias><family>monospace</family><prefer><family>ComicShannsMono Nerd Font Mono</family><family>ComicShannsMono Nerd Font</family></prefer></alias></fontconfig>' | sudoc "$1" tee "$fc" >/dev/null
+    echo "updating font cache"
+    fc-cache -f /usr/local/share/fonts &>/dev/null || true
+
+    req_cmd otf2bdf; req_cmd bdf2psf
+    local otf="/usr/share/fonts/OTF/ComicShannsMonoNerdFont-Regular.otf"
+    local bdf="/tmp/comicshanns.bdf" bdf_fixed="/tmp/comicshanns_fixed.bdf" psf="/tmp/comicshanns.psf"
+    local font_dest; font_dest=$(join_r "$1" "/usr/share/kbd/consolefonts/comicshanns.psf")
+    local consolefont_conf; consolefont_conf=$(join_r "$1" "/etc/conf.d/consolefont")
+
+    echo "converting otf -> bdf"
+    otf2bdf -r 72 -p 20 "$otf" -o "$bdf" &>/dev/null || true
+    sed 's/^AVERAGE_WIDTH [0-9]*/AVERAGE_WIDTH 110/' "$bdf" > "$bdf_fixed"
+    echo "converting bdf -> psf"
+    bdf2psf --fb "$bdf_fixed" \
+        /usr/share/bdf2psf/standard.equivalents \
+        /usr/share/bdf2psf/fontsets/Uni2.512 \
+        512 "$psf" &>/dev/null
+    echo "installing tty font"
+    sudoc "$1" cp "$psf" "$font_dest"
+    sudoc "$1" mkdir -p "$(dirname "$consolefont_conf")"
+    sudoc "$1" touch "$consolefont_conf"
+    sudoc "$1" sed -i '/^consolefont=/d' "$consolefont_conf"
+    echo 'consolefont="comicshanns"' | sudoc "$1" tee -a "$consolefont_conf" >/dev/null
+    [[ "$1" == "/" ]] && sudo rc-service consolefont restart &>/dev/null || true
+    update_ramfs "$1"
+}
+
+update_vscode() {
+    local found=0
+    while IFS= read -r -d '' out; do
+        echo "owning $out"
+        sudoc "$1" chown -R "$USER:$USER" "$out"
+        found=1
+    done < <(find \
+        "$(join_r "$1" /opt)" \
+        "$(join_r "$1" /usr/share)" \
+        "$(join_r "$1" /usr/lib)" \
+        -maxdepth 5 -type d -path '*/resources/app/out' -print0 2>/dev/null)
+    [[ "$found" -eq 1 ]] || echo "no vscode-based editors found"
+}
+
+update_ramfs() {
+    _detect_gpu
+    local mods=() has_other=false
+
+    $has_nvidia && mods+=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
+    $has_amd    && { has_other=true; mods+=(amdgpu); }
+    $has_intel  && { has_other=true; mods+=(i915); }
+
+    local kms_hook="kms "; $has_nvidia && ! $has_other && kms_hook=""
+
+    echo "detected modules: ${mods[*]:-none}"
+    local dst; dst=$(join_r "$1" "/etc/mkinitcpio.conf")
+    printf 'MODULES=(%s)\n\nHOOKS=(base udev autodetect microcode modconf %skeyboard consolefont block filesystems fsck)\n\nCOMPRESSION="lz4"\n' \
+        "${mods[*]}" "$kms_hook" | sudoc "$1" tee "$dst" >/dev/null
+    echo "rebuilding initramfs"
+    sudoc "$1" mkinitcpio -P &>/dev/null
+}
+
+update_cursor() {
+    local icons_dir; icons_dir=$(join_r "$1" "/usr/share/icons")
+    local dst="$icons_dir/$TN"
+    sudoc "$1" rm -rf "$dst"; sudoc "$1" mkdir -p "$icons_dir"
+    sudoc "$1" cp -r --no-preserve=ownership "$TD/cursor/$TN" "$icons_dir/"
+    [[ "$1" == "/" ]] && command -v gtk-update-icon-cache &>/dev/null && sudo gtk-update-icon-cache -f -t "$dst" || true
+}
+
+update_desktop() {
+    local dst; dst=$(join_r "$1" "/usr/share/applications")
+    req_dir "$AD"
+    local files=()
+    while IFS= read -r -d '' f; do files+=("$f"); done < <(find "$AD" -name "*.desktop" -print0)
+    [[ ${#files[@]} -gt 0 ]] || die "No .desktop files in $AD"
+
+    if [[ "$2" -eq 1 ]]; then
+        for f in "${files[@]}"; do [[ -L "$dst/${f##*/}" ]] && sudo rm -f "$dst/${f##*/}" || true; done
+    else
+        command -v desktop-file-validate &>/dev/null && desktop-file-validate "${files[@]}"
+        sudoc "$1" mkdir -p "$dst"
+        for f in "${files[@]}"; do
+            local d="$dst/${f##*/}"
+            if [[ -L "$d" ]]; then
+                [[ "$(readlink -f "$d" 2>/dev/null)" == "$(readlink -f "$f" 2>/dev/null)" ]] || { sudo rm -f "$d"; sudo ln -s "$f" "$d"; }
+            elif [[ ! -e "$d" ]]; then
+                sudo ln -s "$f" "$d"
+            fi
+        done
+    fi
+    [[ "$1" == "/" ]] && command -v update-desktop-database &>/dev/null && sudo update-desktop-database "$dst" &>/dev/null || true
+}
+
+update_bin() {
+    local dst; dst=$(join_r "$1" "/usr/local/bin")
+    
+    req_dir "$SD"; local files=()
+    for f in "$SD"/*; do
+        [[ -f "$f" && ! "$f" -ef "${BASH_SOURCE[0]}" ]] || continue
+        [[ " ${BIN_IGNORE[*]} " == *" ${f##*/} "* ]] || files+=("$f")
+    done
+    [[ ${#files[@]} -gt 0 ]] || die "No files in $SD"
+
+    if [[ "$2" -eq 1 ]]; then
+        for f in "${files[@]}"; do [[ -L "$dst/${f##*/}" ]] && sudo rm -f "$dst/${f##*/}" || true; done
+    else
+        sudoc "$1" mkdir -p "$dst"
+        for f in "${files[@]}"; do [[ ! -L "$dst/${f##*/}" && ! -e "$dst/${f##*/}" ]] && sudo ln -s "$f" "$dst/${f##*/}" || true; done
+    fi
+}
+
+update_grub() {
+    local dst_d; dst_d=$(join_r "$1" "/etc/default/grub")
+    local t_dst; t_dst=$(join_r "$1" "/boot/grub/themes/$TN")
+
+    if [[ "$3" -eq 1 ]]; then
+        sudoc "$1" rm -rf "$t_dst" || true
+    else
+        [[ "${2:-}" =~ ^[0-9]+x[0-9]+$ ]] || die "grub: invalid resolution: ${2:-}"
+        req_dir "$TD/grub/${TN}_$2"
+        sudoc "$1" install -Dm644 "$TD/grub/grub" "$dst_d"
+        sudoc "$1" rm -rf "$t_dst"; sudoc "$1" mkdir -p "$t_dst"
+        sudoc "$1" cp -r --no-preserve=ownership "$TD/grub/${TN}_$2/"* "$t_dst/"
+    fi
+    [[ "$1" == "/" ]] && sudo grub-mkconfig -o /boot/grub/grub.cfg || true
+}
+
+update_splash() {
+    update_ramfs "$1"
+}
+
+update_yazi() {
+    [[ "$2" -eq 0 ]] || die "yazi: --remove not supported"
+    command -v yazi &>/dev/null || return 0
+
+    local pkgs=(
+        AminurAlam/yazi-plugins:{spot,spot-image}
+        BennyOe/tokyo-night
+        boydaihungst/file-extra-metadata
+        KKV9/compress
+        uhs-robert/recycle-bin
+        yazi-rs/plugins:{full-border,mount,toggle-pane}
+    )
+
+    for p in "${pkgs[@]}"; do
+        ya pkg list | grep -iq "$p" || ya pkg add "$p"
+    done
+
+    ya pkg upgrade --discard
+}
+
+usage() { echo -e "Usage:\n  update <module> [args] [--remove]\n  update -h|--help\nModules:\n  ${MODS[*]}\nModule args:\n  grub <resolution>\n  grub --remove"; exit "${1:-0}"; }
+
+[[ $# -eq 0 ]] && usage 2
+[[ "$1" == "-h" || "$1" == "--help" ]] && usage 0
+
+mod="$1"; shift; res=""; rm=0
+
+if [[ "$mod" == "grub" ]]; then
+    [[ $# -ge 1 ]] || die "grub: expected <res> or --remove"
+    if [[ "$1" == "--remove" ]]; then rm=1; shift; else res="$1"; shift; [[ "${1:-}" == "--remove" ]] && { rm=1; shift; }; fi
+else
+    [[ "${1:-}" == "--remove" ]] && { rm=1; shift; }
+fi
+[[ $# -gt 0 ]] && die "too many args"
+
+case "$mod" in
+    checkroot) echo "$R" &>/dev/null && echo true || echo false ;;
+    stow) update_stow "$TR" "$rm" ;;
+    sudo|font|cursor|ramfs|vscode) "update_$mod" "$TR" ;;
+    bin|desktop|yazi) "update_$mod" "$TR" "$rm" ;;
+    splash) update_splash "$TR" ;;
+    grub) update_grub "$TR" "$res" "$rm" ;;
+    *) die "unknown module: $mod" ;;
+esac
+
+echo success

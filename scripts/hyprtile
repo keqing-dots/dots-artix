@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+
+# ================================================
+# VARIABLE DECLARATIONS
+# ================================================
+
+WPM=${WORKSPACES_PER_MONITOR:-10}
+GLOBAL=0
+
+# ================================================
+# HELPER FUNCTIONS (Level 0: No internal dependencies)
+# ================================================
+
+# Retrieve window addresses based on the provided scope (global, active, or target workspace).
+_cl() {
+    local clients=$(hyprctl clients -j) query
+    case "$1" in
+        global) query="" ;;
+        "") query=" | select(.workspace.id == $(hyprctl activeworkspace -j | jq -r '.id'))" ;;
+        *) query=" | select(.workspace.id == $1)" ;;
+    esac
+    echo "$clients" | jq -r ".[]$query | .address"
+}
+
+# Execute a command silently.
+_exec_silent() {
+    "$@" >/dev/null
+}
+
+# Move a batch of windows to a target workspace silently.
+_mv_all() { 
+    local ws=$1 batch_cmds=""; shift
+    for addr in "$@"; do batch_cmds+="dispatch hl.dsp.window.move({window='address:${addr}',workspace='${ws}',follow=false}); "; done
+    [[ -n "$batch_cmds" ]] && _exec_silent hyprctl --batch "$batch_cmds"
+}
+
+# Covert local to global workspace id and cache it. Return immediately if gb is passed
+_to_global() {
+    [[ "$GLOBAL" -eq 1 ]] && { echo "$1"; return; }
+    
+    [[ ! "$1" =~ ^-?[0-9]+$ || $1 -lt 1 || $1 -gt WPM ]] && { echo "$1"; return; }
+    
+    [[ -z "$ACTIVE_WS_BASE" ]] && { 
+        local active_ws=$(hyprctl activeworkspace -j | jq -r '.id')
+        [[ ! "$active_ws" =~ ^-?[0-9]+$ ]] && active_ws=1 
+        ACTIVE_WS_BASE=$(( ((active_ws - 1) / WPM) * WPM ))
+    }
+    
+    echo $(( ACTIVE_WS_BASE + $1 ))
+}
+
+# ================================================
+# MAIN FUNCTIONS (Level 1: Depends on Level 0)
+# ================================================
+
+# Switch focus to the specified local workspace.
+fw() {
+    _exec_silent hyprctl dispatch "hl.dsp.focus({workspace='$(_to_global "$1")'})"
+}
+
+# Move the active or specified window to a target workspace, either silently or following.
+mw() {
+    local follow="true"
+    [[ "$1" == "q" ]] && { follow="false"; shift; }
+    local win="${2:+address:$2}"
+    _exec_silent hyprctl dispatch "hl.dsp.window.move({window='${win:-activewindow}',workspace='$(_to_global $1)',follow=${follow}})"
+}
+
+# ================================================
+# MAIN FUNCTIONS (Level 2: Depends on Level 0 & Level 1)
+# ================================================
+
+# Close all windows within the specified scope (active workspace, specific workspace, or global).
+cw() {
+    local addresses scope=$1 batch_cmds=""
+    [[ "$scope" == "a" ]] && scope="global"
+    
+    mapfile -t addresses < <(_cl "$scope")
+    for address in "${addresses[@]}"; do batch_cmds+="dispatch hl.dsp.window.close({window='address:${address}'}); "; done
+    
+    [[ -n "$batch_cmds" ]] && _exec_silent hyprctl --batch "$batch_cmds"
+    [[ "$scope" == "global" ]] && fw 1
+}
+
+# Move all windows from active workspace into a target workspace, then switch to that workspace
+mi() {
+    local dst_loc="$1"
+    [[ ! "$dst_loc" =~ ^-?[0-9]+$ ]] && { echo "Invalid destination workspace" >&2; return; }
+
+    local src_glob=$(hyprctl activeworkspace -j | jq -r '.id // empty')
+    [[ -z "$src_glob" ]] && { echo "Invalid source workspace" >&2; return; }
+
+    local dst_glob=$(_to_global "$dst_loc")
+    [[ "$src_glob" == "$dst_glob" ]] && return 0
+
+    local addrs
+    mapfile -t addrs < <(_cl "$src_glob")
+
+    (( ${#addrs[@]} > 0 )) && _mv_all "$dst_glob" "${addrs[@]}"
+    fw "$dst_loc"
+}
+
+# Swap all windows between the current active workspace and the target local workspace.
+sw() {
+    local dst_loc="$1"
+    [[ ! "$dst_loc" =~ ^-?[0-9]+$ ]] && { echo "Invalid destination workspace" >&2; return; }
+
+    local src_glob=$(hyprctl activeworkspace -j | jq -r '.id // empty')
+    [[ -z "$src_glob" ]] && { echo "Invalid source workspace" >&2; return; }
+
+    local dst_glob=$(_to_global "$dst_loc")
+    [[ "$src_glob" == "$dst_glob" ]] && return 0
+
+    local src_addrs dst_addrs
+    mapfile -t src_addrs < <(_cl "$src_glob")
+    mapfile -t dst_addrs < <(_cl "$dst_glob")
+
+    (( ${#src_addrs[@]} == 0 && ${#dst_addrs[@]} == 0 )) && return 0
+
+    if (( ${#src_addrs[@]} == 0 )); then
+        _mv_all "$src_glob" "${dst_addrs[@]}"
+    elif (( ${#dst_addrs[@]} == 0 )); then
+        _mv_all "$dst_glob" "${src_addrs[@]}"
+    else
+        _mv_all "special:__tmp_swp_$$" "${src_addrs[@]}"
+        _mv_all "$src_glob" "${dst_addrs[@]}"
+        _mv_all "$dst_glob" "${src_addrs[@]}"
+    fi
+
+    fw "$dst_loc"
+}
+
+# ================================================
+# EXECUTION (Sorted Alphabetically)
+# ================================================
+
+[[ "$1" == "gb" ]] && { GLOBAL=1; shift; }
+
+case "$1" in
+    cw) cw "$2" ;;
+    fw) fw "$2" ;;
+    mi) mi "$2" ;;
+    mw) mw "$2" "$3" "$4" ;;
+    sw) sw "$2" ;;
+    *) echo "usage: hyprtile [gb] <cw|fw|mi|mw|sw> [args]" ;;
+esac
