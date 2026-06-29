@@ -34,7 +34,6 @@ SYSTEM_PKGS=(
     pciutils
     pipewire
     pipewire-alsa
-    pipewire-audio
     pipewire-pulse
     qt6-5compat
     quickshell
@@ -61,6 +60,7 @@ EXTRA_PKGS=(
     noto-fonts-cjk
     otf-comicshanns-nerd
     starship
+    lz4
     xxhash
     yazi
     zoxide
@@ -125,6 +125,7 @@ $has_intel && paru -S --needed --noconfirm mesa vulkan-intel intel-media-driver
 
 # 4. Enable services
 step "Enabling services"
+sudo rc-update add dbus default
 sudo rc-update add elogind default
 sudo rc-update add NetworkManager default
 sudo rc-update add bluetooth default
