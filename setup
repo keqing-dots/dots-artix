@@ -122,7 +122,7 @@ step "Enabling services"
 sudo rc-update add dbus default
 sudo rc-update add elogind default
 sudo rc-update add NetworkManager default
-sudo rc-update add bluetooth default
+sudo rc-update add bluetoothd default
 
 # 5. GRUB install
 mountpoint -q /boot/efi && efi_dir=/boot/efi || efi_dir=/boot
