@@ -214,6 +214,7 @@ F.auto_start({
 	"pipewire",
 	"wireplumber",
 	"fcitx5",
+	"syncthing --no-browser",
 	"keqing-shell start_locked",
 })
 

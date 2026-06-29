@@ -22,7 +22,9 @@ SYSTEM_PKGS=(
     fcitx5
     fontconfig
     git
+    elogind
     greetd
+    greetd-openrc
     grub
     hyprland
     imagemagick
@@ -67,7 +69,6 @@ EXTRA_PKGS=(
 
 AUR_PKGS=(
     bdf2psf
-    hellwal
     otf2bdf
     unimatrix-git
     visual-studio-code-bin
@@ -84,6 +85,13 @@ if ! command -v paru &>/dev/null; then
     rm -rf "$tmp"
 else
     echo "paru already installed"
+fi
+
+# paru.conf: assume systemd installed so AUR packages that link against
+# libsystemd.so (provided by elogind) don't get blocked by the resolver
+mkdir -p "$HOME/.config/paru"
+if ! grep -q "AssumeInstalled" "$HOME/.config/paru/paru.conf" 2>/dev/null; then
+    echo -e "\n[options]\nAssumeInstalled = systemd" >> "$HOME/.config/paru/paru.conf"
 fi
 
 # 2. Dependencies
@@ -113,6 +121,7 @@ $has_intel && paru -S --needed --noconfirm mesa vulkan-intel intel-media-driver
 
 # 4. Enable services
 step "Enabling services"
+sudo rc-update add elogind default
 sudo rc-update add NetworkManager default
 sudo rc-update add bluetooth default
 
