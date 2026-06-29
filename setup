@@ -120,6 +120,9 @@ $has_intel && paru -S --needed --noconfirm mesa vulkan-intel intel-media-driver
 ! $has_nvidia && ! $has_amd && ! $has_intel && echo "GPU not detected, skipping driver installation"
 
 # 4. Enable services
+step "Installing custom init scripts"
+sudo install -Dm755 "$R/system/init.d/tailscaled" /etc/init.d/tailscaled
+
 step "Enabling services"
 sudo rc-update add dbus default
 sudo rc-update add elogind default

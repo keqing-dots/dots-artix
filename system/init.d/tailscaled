@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+
+name="tailscaled"
+description="Tailscale VPN daemon"
+command="/usr/bin/tailscaled"
+command_args="${TAILSCALED_FLAGS:---state=/var/lib/tailscale/tailscaled.state --socket=/run/tailscale/tailscaled.sock}"
+command_background=true
+pidfile="/run/tailscaled.pid"
+
+depend() {
+    need net
+    after firewall
+}
+
+start_pre() {
+    mkdir -p /var/lib/tailscale /run/tailscale
+}
